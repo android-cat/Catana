@@ -139,6 +139,36 @@ func DrawSunIcon(gtx C, size int, col color.NRGBA) D {
 	return D{Size: image.Pt(size, size)}
 }
 
+// DrawMoonIcon は月アイコンを描画する（ライトモード時に表示、クリックでダークへ）
+func DrawMoonIcon(gtx C, size int, col color.NRGBA) D {
+	s := float32(size)
+	defer op.Offset(image.Point{}).Push(gtx.Ops).Pop()
+
+	// 三日月形：外側の円弧（右向き凸）
+	cx, cy, r := s*0.5, s*0.5, s*0.3
+	steps := 24
+	// 外側の弧：-120°〜+120°（右半分＋少し）
+	for i := 0; i < steps; i++ {
+		a1 := (-120.0 + float64(i)*240.0/float64(steps)) * math.Pi / 180.0
+		a2 := (-120.0 + float64(i+1)*240.0/float64(steps)) * math.Pi / 180.0
+		p1 := f32.Pt(cx+r*float32(math.Cos(a1)), cy+r*float32(math.Sin(a1)))
+		p2 := f32.Pt(cx+r*float32(math.Cos(a2)), cy+r*float32(math.Sin(a2)))
+		drawLine(gtx, p1, p2, col, 1.5)
+	}
+	// 内側の弧（中心を右にずらして三日月の空き部分を形成）
+	icx := cx + s*0.1
+	ir := r * 0.82
+	for i := 0; i < steps; i++ {
+		a1 := (-120.0 + float64(i)*240.0/float64(steps)) * math.Pi / 180.0
+		a2 := (-120.0 + float64(i+1)*240.0/float64(steps)) * math.Pi / 180.0
+		p1 := f32.Pt(icx+ir*float32(math.Cos(a1)), cy+ir*float32(math.Sin(a1)))
+		p2 := f32.Pt(icx+ir*float32(math.Cos(a2)), cy+ir*float32(math.Sin(a2)))
+		drawLine(gtx, p1, p2, col, 1.5)
+	}
+
+	return D{Size: image.Pt(size, size)}
+}
+
 // DrawChevronRight は右向き矢印を描画する
 func DrawChevronRight(gtx C, size int, col color.NRGBA) D {
 	s := float32(size)

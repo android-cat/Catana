@@ -21,6 +21,7 @@ import (
 type CatanaApp struct {
 	State           *editor.EditorState
 	Theme           *Theme
+	isDarkMode      bool
 	matTheme        *material.Theme
 	activityBar     *ActivityBar
 	sidebar         *Sidebar
@@ -53,6 +54,7 @@ func NewCatanaApp(workspace string) *CatanaApp {
 	ca := &CatanaApp{
 		State:        state,
 		Theme:        theme,
+		isDarkMode:   true,
 		matTheme:     th,
 		activityBar:  NewActivityBar(theme),
 		sidebar:      NewSidebar(theme),
@@ -67,6 +69,9 @@ func NewCatanaApp(workspace string) *CatanaApp {
 		fpsTimer:     time.Now(),
 		debugServer:  debug.NewDebugServer(),
 	}
+
+	// テーマ切替コールバックを設定
+	ca.activityBar.onToggleTheme = ca.toggleTheme
 
 	// デバッグソケットサーバー起動
 	if err := ca.debugServer.Start(); err != nil {
@@ -226,6 +231,32 @@ func (a *CatanaApp) layoutMainEditor(gtx C) D {
 			return a.terminalView.Layout(gtx, a.State, a.matTheme)
 		}),
 	)
+}
+
+// toggleTheme はダーク/ライトテーマを切り替える
+func (a *CatanaApp) toggleTheme() {
+	a.isDarkMode = !a.isDarkMode
+	var t *Theme
+	if a.isDarkMode {
+		t = DarkTheme()
+	} else {
+		t = LightTheme()
+	}
+	a.Theme = t
+	// 全コンポーネントのテーマポインタを更新
+	a.activityBar.theme = t
+	a.activityBar.isDarkMode = a.isDarkMode
+	a.sidebar.theme = t
+	a.sidebar.fileTree.theme = t
+	a.sidebar.gitPanel.theme = t
+	a.tabBar.theme = t
+	a.editorView.theme = t
+	a.editorView.completionPopup.theme = t
+	a.statusBar.theme = t
+	a.omniBar.theme = t
+	a.searchBar.theme = t
+	a.minimap.theme = t
+	a.terminalView.theme = t
 }
 
 // Stop はアプリケーションのクリーンアップを行う

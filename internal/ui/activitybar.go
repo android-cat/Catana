@@ -17,18 +17,20 @@ type IconFunc func(C, int, color.NRGBA) D
 
 // ActivityBar はエディタ左端のアイコンバー
 type ActivityBar struct {
-	theme       *Theme
-	btnFiles    widget.Clickable
-	btnSearch   widget.Clickable
-	btnGit      widget.Clickable
-	btnExt      widget.Clickable
-	btnTheme    widget.Clickable
-	btnSettings widget.Clickable
+	theme         *Theme
+	isDarkMode    bool
+	onToggleTheme func()
+	btnFiles      widget.Clickable
+	btnSearch     widget.Clickable
+	btnGit        widget.Clickable
+	btnExt        widget.Clickable
+	btnTheme      widget.Clickable
+	btnSettings   widget.Clickable
 }
 
 // NewActivityBar は新しいActivityBarを作成する
 func NewActivityBar(theme *Theme) *ActivityBar {
-	return &ActivityBar{theme: theme}
+	return &ActivityBar{theme: theme, isDarkMode: true}
 }
 
 // Layout はActivityBarを描画する
@@ -52,7 +54,9 @@ func (ab *ActivityBar) Layout(gtx C, state *editor.EditorState, th *material.The
 		state.SetSidebarTab(editor.TabExtensions)
 	}
 	for ab.btnTheme.Clicked(gtx) {
-		// テーマ切替（Phase 1ではスタブ）
+		if ab.onToggleTheme != nil {
+			ab.onToggleTheme()
+		}
 	}
 
 	return withBg(gtx, func(gtx C, sz image.Point) {
@@ -83,7 +87,12 @@ func (ab *ActivityBar) Layout(gtx C, state *editor.EditorState, th *material.The
 				return layout.Inset{Bottom: unit.Dp(16)}.Layout(gtx, func(gtx C) D {
 					return layout.Flex{Axis: layout.Vertical, Alignment: layout.Middle}.Layout(gtx,
 						layout.Rigid(func(gtx C) D {
-							return ab.renderIconButton(gtx, &ab.btnTheme, DrawSunIcon, ab.theme.TextMuted)
+							// ダークモード時は太陽(→ライトへ切替)、ライトモード時は月(→ダークへ切替)
+							themeIcon := IconFunc(DrawSunIcon)
+							if !ab.isDarkMode {
+								themeIcon = DrawMoonIcon
+							}
+							return ab.renderIconButton(gtx, &ab.btnTheme, themeIcon, ab.theme.TextMuted)
 						}),
 						layout.Rigid(func(gtx C) D {
 							return ab.renderIconButton(gtx, &ab.btnSettings, DrawSettingsIcon, ab.theme.TextMuted)

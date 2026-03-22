@@ -155,6 +155,74 @@ func DarkTheme() *Theme {
 	}
 }
 
+// LightTheme はライトテーマを返す
+func LightTheme() *Theme {
+	return &Theme{
+		Background:  hexColor(0xF5F5F5),
+		Surface:     hexColor(0xFFFFFF),
+		SurfaceAlt:  hexColor(0xEFEFEF),
+		SurfaceDark: hexColor(0xE8E8E8),
+
+		Border:       hexColor(0xD0D0D0),
+		BorderLight:  hexColor(0xC0C0C0),
+		BorderSubtle: hexColor(0xE0E0E0),
+
+		Text:         hexColor(0x1F2937),
+		TextMuted:    hexColor(0x6B7280),
+		TextDark:     hexColor(0x9CA3AF),
+		TextVeryDark: hexColor(0xD1D5DB),
+
+		Accent:       hexColor(0x059669),
+		AccentBg:     nrgba(0x05, 0x96, 0x69, 25),
+		AccentBorder: nrgba(0x05, 0x96, 0x69, 25),
+
+		StatusBar:     hexColor(0x1D7A4A),
+		StatusBarText: hexColor(0xF0FDF4),
+
+		Selection: nrgba(0x05, 0x96, 0x69, 50),
+
+		OmniBarBg:     nrgba(0xFF, 0xFF, 0xFF, 230),
+		OmniBarBorder: nrgba(0x00, 0x00, 0x00, 25),
+
+		AIPurple:   hexColor(0x7C3AED),
+		AIPurpleBg: nrgba(0x7C, 0x3A, 0xED, 30),
+		AIGreen:    hexColor(0x059669),
+		AIGreenBg:  nrgba(0x05, 0x96, 0x69, 30),
+
+		Hover: hexColor(0xE8E8E8),
+
+		SynKeyword:  hexColor(0xBE185D),
+		SynType:     hexColor(0x92400E),
+		SynString:   hexColor(0x15803D),
+		SynComment:  hexColor(0x6B7280),
+		SynNumber:   hexColor(0xC2410C),
+		SynFunction: hexColor(0x1D4ED8),
+		SynOperator: hexColor(0x374151),
+		SynPunct:    hexColor(0x374151),
+		SynBuiltin:  hexColor(0x6D28D9),
+		SynPlain:    hexColor(0x1F2937),
+
+		LineNumber:       hexColor(0x9CA3AF),
+		LineNumberActive: hexColor(0x374151),
+
+		Cursor: hexColor(0x1F2937),
+
+		SearchMatch:       nrgba(0xFB, 0xBF, 0x24, 80),
+		SearchMatchActive: nrgba(0xFB, 0xBF, 0x24, 160),
+
+		GitAdded:    hexColor(0x16A34A),
+		GitModified: hexColor(0xCA8A04),
+		GitDeleted:  hexColor(0xDC2626),
+
+		FileIconGo:      hexColor(0x1D4ED8),
+		FileIconRust:    hexColor(0xC2410C),
+		FileIconPy:      hexColor(0xCA8A04),
+		FileIconTs:      hexColor(0x0369A1),
+		FileIconJs:      hexColor(0xB45309),
+		FileIconDefault: hexColor(0x6B7280),
+	}
+}
+
 // TokenColor はトークンタイプに対応する色を返す
 func (t *Theme) TokenColor(tokenType syntax.TokenType) color.NRGBA {
 	switch tokenType {
