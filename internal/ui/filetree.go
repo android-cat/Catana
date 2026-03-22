@@ -498,7 +498,9 @@ func (ft *FileTree) layoutEntry(gtx C, th *material.Theme, entry *FileEntry, sta
 			} else if isSelected {
 				fillRoundRect(gtx, ft.theme.AccentBg, sz, 4)
 			} else if isDragged {
-				fillRoundRect(gtx, nrgba(0x34, 0xD3, 0x99, 18), sz, 4)
+				dragBg := ft.theme.Accent
+				dragBg.A = 18
+				fillRoundRect(gtx, dragBg, sz, 4)
 			} else if btn.Hovered() {
 				fillRoundRect(gtx, ft.theme.SurfaceAlt, sz, 4)
 			}
@@ -917,7 +919,7 @@ func (ft *FileTree) layoutDragPreview(gtx C, th *material.Theme, size image.Poin
 	withRoundBg(previewGtx, ft.theme.Surface, 8, func(gtx C) D {
 		return withBg(gtx, func(gtx C, sz image.Point) {
 			fillRoundRect(gtx, ft.theme.BorderLight, sz, 8)
-			fillRoundRect(gtx, nrgba(0x08, 0x0F, 0x0C, 235), image.Pt(maxInt(0, sz.X-2), maxInt(0, sz.Y-2)), 7)
+			fillRoundRect(gtx, ft.theme.SurfaceDark, image.Pt(maxInt(0, sz.X-2), maxInt(0, sz.Y-2)), 7)
 		}, func(gtx C) D {
 			return layout.UniformInset(unit.Dp(10)).Layout(gtx, func(gtx C) D {
 				return layout.Flex{Axis: layout.Vertical}.Layout(gtx,
@@ -955,7 +957,7 @@ func (ft *FileTree) layoutContextMenu(gtx C, th *material.Theme, size image.Poin
 	withRoundBg(menuGtx, ft.theme.Surface, 8, func(gtx C) D {
 		return withBg(gtx, func(gtx C, sz image.Point) {
 			fillRoundRect(gtx, ft.theme.BorderLight, sz, 8)
-			fillRoundRect(gtx, nrgba(0x0B, 0x0F, 0x0D, 245), image.Pt(maxInt(0, sz.X-2), maxInt(0, sz.Y-2)), 7)
+			fillRoundRect(gtx, ft.theme.SurfaceDark, image.Pt(maxInt(0, sz.X-2), maxInt(0, sz.Y-2)), 7)
 		}, func(gtx C) D {
 			return layout.UniformInset(unit.Dp(4)).Layout(gtx, func(gtx C) D {
 				return layout.Flex{Axis: layout.Vertical}.Layout(gtx,

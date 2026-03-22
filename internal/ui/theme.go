@@ -69,6 +69,9 @@ type Theme struct {
 	// カーソル
 	Cursor color.NRGBA // white
 
+	// ゴーストテキスト（AIインライン補完）
+	GhostText color.NRGBA // gray-500 alpha
+
 	// 検索マッチ
 	SearchMatch       color.NRGBA // 検索結果ハイライト背景
 	SearchMatchActive color.NRGBA // 現在の検索結果ハイライト背景
@@ -85,6 +88,41 @@ type Theme struct {
 	FileIconTs      color.NRGBA // blue-500
 	FileIconJs      color.NRGBA // yellow-400
 	FileIconDefault color.NRGBA // gray-400
+
+	// オーバーレイ・ポップアップ
+	OverlayBg color.NRGBA // モーダル背景オーバーレイ
+	PopupBg   color.NRGBA // ポップアップ・ドロップダウン背景
+	Separator color.NRGBA // セパレータ / 薄い境界線
+	SubtleBg  color.NRGBA // 微妙な背景ハイライト（ホバーより薄い）
+	PanelBg   color.NRGBA // パネル背景（ターミナルヘッダ等）
+
+	// カレント行
+	CurrentLineBg color.NRGBA // カレント行ハイライト
+
+	// 診断色
+	DiagError   color.NRGBA // LSP エラー
+	DiagWarning color.NRGBA // LSP 警告
+	DiagInfo    color.NRGBA // LSP 情報
+
+	// 差分表示色
+	DiffHunkBg    color.NRGBA // diff ハンクヘッダ背景
+	DiffAddedBg   color.NRGBA // diff 追加行背景
+	DiffDeletedBg color.NRGBA // diff 削除行背景
+
+	// エラー・成功・警告テキスト
+	ErrorText   color.NRGBA
+	ErrorBg     color.NRGBA
+	SuccessText color.NRGBA
+	WarningText color.NRGBA
+
+	// ステータスバーパフォーマンス表示
+	PerfGreen  color.NRGBA // FPS
+	PerfYellow color.NRGBA // メモリ
+	PerfPurple color.NRGBA // LSP
+
+	// ターミナル
+	TerminalBg   color.NRGBA     // ターミナル背景
+	TerminalANSI [16]color.NRGBA // ANSI 16色パレット
 }
 
 // DarkTheme はデフォルトのダークテーマを返す
@@ -139,6 +177,8 @@ func DarkTheme() *Theme {
 
 		Cursor: hexColor(0xFFFFFF),
 
+		GhostText: nrgba(0x6B, 0x72, 0x80, 128),
+
 		SearchMatch:       nrgba(0xEA, 0xB3, 0x08, 60),
 		SearchMatchActive: nrgba(0xEA, 0xB3, 0x08, 120),
 
@@ -152,16 +192,61 @@ func DarkTheme() *Theme {
 		FileIconTs:      hexColor(0x38BDF8),
 		FileIconJs:      hexColor(0xFACC15),
 		FileIconDefault: hexColor(0x9CA3AF),
+
+		OverlayBg: nrgba(0x00, 0x00, 0x00, 153),
+		PopupBg:   nrgba(0x1A, 0x1A, 0x1A, 240),
+		Separator: nrgba(0xFF, 0xFF, 0xFF, 13),
+		SubtleBg:  nrgba(0xFF, 0xFF, 0xFF, 8),
+		PanelBg:   hexColor(0x171717),
+
+		CurrentLineBg: nrgba(0xFF, 0xFF, 0xFF, 5),
+
+		DiagError:   nrgba(0xE0, 0x6C, 0x75, 200),
+		DiagWarning: nrgba(0xE5, 0xC0, 0x7B, 200),
+		DiagInfo:    nrgba(0x61, 0xAF, 0xEF, 150),
+
+		DiffHunkBg:    nrgba(0x30, 0x30, 0x60, 40),
+		DiffAddedBg:   nrgba(0x22, 0xC5, 0x5E, 20),
+		DiffDeletedBg: nrgba(0xEF, 0x44, 0x44, 20),
+
+		ErrorText:   hexColor(0xF87171),
+		ErrorBg:     nrgba(0xEF, 0x44, 0x44, 25),
+		SuccessText: hexColor(0x4ADE80),
+		WarningText: hexColor(0xFBBF24),
+
+		PerfGreen:  nrgba(0xBB, 0xF7, 0xD0, 255),
+		PerfYellow: nrgba(0xFE, 0xF0, 0x8A, 255),
+		PerfPurple: nrgba(0xE9, 0xD5, 0xFF, 255),
+
+		TerminalBg: hexColor(0x0F0F0F),
+		TerminalANSI: [16]color.NRGBA{
+			nrgba(0x00, 0x00, 0x00, 255), // 0: black
+			nrgba(0xCD, 0x3E, 0x45, 255), // 1: red
+			nrgba(0x34, 0xD3, 0x99, 255), // 2: green
+			nrgba(0xE5, 0xC0, 0x7B, 255), // 3: yellow
+			nrgba(0x61, 0xAF, 0xEF, 255), // 4: blue
+			nrgba(0xC6, 0x78, 0xDD, 255), // 5: magenta
+			nrgba(0x56, 0xB6, 0xC2, 255), // 6: cyan
+			nrgba(0xD1, 0xD5, 0xDB, 255), // 7: white
+			nrgba(0x5C, 0x63, 0x70, 255), // 8: bright black
+			nrgba(0xE0, 0x6C, 0x75, 255), // 9: bright red
+			nrgba(0x98, 0xC3, 0x79, 255), // 10: bright green
+			nrgba(0xE5, 0xC0, 0x7B, 255), // 11: bright yellow
+			nrgba(0x61, 0xAF, 0xEF, 255), // 12: bright blue
+			nrgba(0xC6, 0x78, 0xDD, 255), // 13: bright magenta
+			nrgba(0x56, 0xB6, 0xC2, 255), // 14: bright cyan
+			nrgba(0xFF, 0xFF, 0xFF, 255), // 15: bright white
+		},
 	}
 }
 
 // LightTheme はライトテーマを返す
 func LightTheme() *Theme {
 	return &Theme{
-		Background:  hexColor(0xF5F5F5),
+		Background:  hexColor(0xFFFFFF),
 		Surface:     hexColor(0xFFFFFF),
-		SurfaceAlt:  hexColor(0xEFEFEF),
-		SurfaceDark: hexColor(0xE8E8E8),
+		SurfaceAlt:  hexColor(0xF5F5F5),
+		SurfaceDark: hexColor(0xEFEFEF),
 
 		Border:       hexColor(0xD0D0D0),
 		BorderLight:  hexColor(0xC0C0C0),
@@ -207,6 +292,8 @@ func LightTheme() *Theme {
 
 		Cursor: hexColor(0x1F2937),
 
+		GhostText: nrgba(0x9C, 0xA3, 0xAF, 128),
+
 		SearchMatch:       nrgba(0xFB, 0xBF, 0x24, 80),
 		SearchMatchActive: nrgba(0xFB, 0xBF, 0x24, 160),
 
@@ -220,6 +307,51 @@ func LightTheme() *Theme {
 		FileIconTs:      hexColor(0x0369A1),
 		FileIconJs:      hexColor(0xB45309),
 		FileIconDefault: hexColor(0x6B7280),
+
+		OverlayBg: nrgba(0x00, 0x00, 0x00, 0),
+		PopupBg:   nrgba(0xFF, 0xFF, 0xFF, 245),
+		Separator: nrgba(0x00, 0x00, 0x00, 13),
+		SubtleBg:  nrgba(0x00, 0x00, 0x00, 8),
+		PanelBg:   hexColor(0xE8E8E8),
+
+		CurrentLineBg: nrgba(0x00, 0x00, 0x00, 8),
+
+		DiagError:   nrgba(0xDC, 0x26, 0x26, 200),
+		DiagWarning: nrgba(0xCA, 0x8A, 0x04, 200),
+		DiagInfo:    nrgba(0x1D, 0x4E, 0xD8, 150),
+
+		DiffHunkBg:    nrgba(0x1D, 0x4E, 0xD8, 20),
+		DiffAddedBg:   nrgba(0x16, 0xA3, 0x4A, 20),
+		DiffDeletedBg: nrgba(0xDC, 0x26, 0x26, 20),
+
+		ErrorText:   hexColor(0xDC2626),
+		ErrorBg:     nrgba(0xDC, 0x26, 0x26, 25),
+		SuccessText: hexColor(0x059669),
+		WarningText: hexColor(0xCA8A04),
+
+		PerfGreen:  hexColor(0x059669),
+		PerfYellow: hexColor(0xCA8A04),
+		PerfPurple: hexColor(0x6D28D9),
+
+		TerminalBg: hexColor(0xF0F0F0),
+		TerminalANSI: [16]color.NRGBA{
+			nrgba(0x00, 0x00, 0x00, 255), // 0: black
+			nrgba(0xDC, 0x26, 0x26, 255), // 1: red
+			nrgba(0x16, 0xA3, 0x4A, 255), // 2: green
+			nrgba(0xCA, 0x8A, 0x04, 255), // 3: yellow
+			nrgba(0x1D, 0x4E, 0xD8, 255), // 4: blue
+			nrgba(0x6D, 0x28, 0xD9, 255), // 5: magenta
+			nrgba(0x06, 0x91, 0xB7, 255), // 6: cyan
+			nrgba(0x1F, 0x29, 0x37, 255), // 7: white
+			nrgba(0x6B, 0x72, 0x80, 255), // 8: bright black
+			nrgba(0xEF, 0x44, 0x44, 255), // 9: bright red
+			nrgba(0x22, 0xC5, 0x5E, 255), // 10: bright green
+			nrgba(0xEA, 0xB3, 0x08, 255), // 11: bright yellow
+			nrgba(0x38, 0xBD, 0xF8, 255), // 12: bright blue
+			nrgba(0x8B, 0x5C, 0xF6, 255), // 13: bright magenta
+			nrgba(0x06, 0xB6, 0xD4, 255), // 14: bright cyan
+			nrgba(0xF9, 0xFA, 0xFB, 255), // 15: bright white
+		},
 	}
 }
 

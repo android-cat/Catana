@@ -95,7 +95,7 @@ func (sb *StatusBar) Layout(gtx C, state *editor.EditorState, th *material.Theme
 									lbl := material.Label(th, unit.Sp(10), fmt.Sprintf("✕ %d  ✓ %d", errors, warns))
 									lbl.Color = sb.theme.StatusBarText
 									if errors > 0 {
-										lbl.Color = nrgba(0xEF, 0x44, 0x44, 255) // 赤
+										lbl.Color = sb.theme.ErrorText
 									}
 									return lbl.Layout(gtx)
 								})
@@ -112,19 +112,19 @@ func (sb *StatusBar) Layout(gtx C, state *editor.EditorState, th *material.Theme
 					return layout.Flex{Axis: layout.Horizontal, Alignment: layout.Middle}.Layout(gtx,
 						// パフォーマンスセクション（暗い背景）
 						layout.Rigid(func(gtx C) D {
-							return withFlatBg(gtx, nrgba(0, 0, 0, 51), func(gtx C) D {
+							return withFlatBg(gtx, sb.theme.SurfaceDark, func(gtx C) D {
 								return layout.Inset{Left: unit.Dp(12), Right: unit.Dp(12), Top: unit.Dp(4), Bottom: unit.Dp(4)}.Layout(gtx, func(gtx C) D {
 									return layout.Flex{Axis: layout.Horizontal, Alignment: layout.Middle}.Layout(gtx,
 										// FPS
 										layout.Rigid(func(gtx C) D {
 											return layout.Flex{Axis: layout.Horizontal, Alignment: layout.Middle}.Layout(gtx,
 												layout.Rigid(func(gtx C) D {
-													return DrawActivityIcon(gtx, gtx.Dp(unit.Dp(10)), nrgba(0xBB, 0xF7, 0xD0, 178))
+													return DrawActivityIcon(gtx, gtx.Dp(unit.Dp(10)), sb.theme.PerfGreen)
 												}),
 												layout.Rigid(func(gtx C) D {
 													return layout.Inset{Left: unit.Dp(4)}.Layout(gtx, func(gtx C) D {
 														lbl := material.Label(th, unit.Sp(10), fmt.Sprintf("%.0f fps", sb.fps))
-														lbl.Color = nrgba(0xBB, 0xF7, 0xD0, 255)
+														lbl.Color = sb.theme.PerfGreen
 														return lbl.Layout(gtx)
 													})
 												}),
@@ -135,12 +135,12 @@ func (sb *StatusBar) Layout(gtx C, state *editor.EditorState, th *material.Theme
 											return layout.Inset{Left: unit.Dp(12)}.Layout(gtx, func(gtx C) D {
 												return layout.Flex{Axis: layout.Horizontal, Alignment: layout.Middle}.Layout(gtx,
 													layout.Rigid(func(gtx C) D {
-														return DrawCpuIcon(gtx, gtx.Dp(unit.Dp(10)), nrgba(0xFE, 0xF0, 0x8A, 178))
+														return DrawCpuIcon(gtx, gtx.Dp(unit.Dp(10)), sb.theme.PerfYellow)
 													}),
 													layout.Rigid(func(gtx C) D {
 														return layout.Inset{Left: unit.Dp(4)}.Layout(gtx, func(gtx C) D {
 															lbl := material.Label(th, unit.Sp(10), fmt.Sprintf("%d MB", sb.memUsage.Load()))
-															lbl.Color = nrgba(0xFE, 0xF0, 0x8A, 255)
+															lbl.Color = sb.theme.PerfYellow
 															return lbl.Layout(gtx)
 														})
 													}),
@@ -152,7 +152,7 @@ func (sb *StatusBar) Layout(gtx C, state *editor.EditorState, th *material.Theme
 											return layout.Inset{Left: unit.Dp(12)}.Layout(gtx, func(gtx C) D {
 												return layout.Flex{Axis: layout.Horizontal, Alignment: layout.Middle}.Layout(gtx,
 													layout.Rigid(func(gtx C) D {
-														return DrawZapIcon(gtx, gtx.Dp(unit.Dp(10)), nrgba(0xE9, 0xD5, 0xFF, 178))
+														return DrawZapIcon(gtx, gtx.Dp(unit.Dp(10)), sb.theme.PerfPurple)
 													}),
 													layout.Rigid(func(gtx C) D {
 														return layout.Inset{Left: unit.Dp(4)}.Layout(gtx, func(gtx C) D {
@@ -162,7 +162,7 @@ func (sb *StatusBar) Layout(gtx C, state *editor.EditorState, th *material.Theme
 																text = "---"
 															}
 															lbl := material.Label(th, unit.Sp(10), text)
-															lbl.Color = nrgba(0xE9, 0xD5, 0xFF, 255)
+															lbl.Color = sb.theme.PerfPurple
 															return lbl.Layout(gtx)
 														})
 													}),
@@ -180,7 +180,7 @@ func (sb *StatusBar) Layout(gtx C, state *editor.EditorState, th *material.Theme
 							if doc != nil && doc.Language != "" {
 								lang = doc.Language
 							}
-							return withFlatBg(gtx, nrgba(0, 0, 0, 25), func(gtx C) D {
+							return withFlatBg(gtx, sb.theme.SubtleBg, func(gtx C) D {
 								return layout.Inset{Left: unit.Dp(12), Right: unit.Dp(12), Top: unit.Dp(4), Bottom: unit.Dp(4)}.Layout(gtx, func(gtx C) D {
 									return layout.Flex{Axis: layout.Horizontal, Alignment: layout.Middle}.Layout(gtx,
 										layout.Rigid(func(gtx C) D {

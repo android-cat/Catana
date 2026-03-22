@@ -331,6 +331,113 @@ type FormattingOptions struct {
 	InsertSpaces bool `json:"insertSpaces"`
 }
 
+// ─── Hover ───
+
+// HoverParams はホバーリクエストのパラメータ
+type HoverParams struct {
+	TextDocument TextDocumentIdentifier `json:"textDocument"`
+	Position     Position               `json:"position"`
+}
+
+// HoverResult はホバーレスポンス
+type HoverResult struct {
+	Contents MarkupContent `json:"contents"`
+	Range    *Range        `json:"range,omitempty"`
+}
+
+// MarkupContent はマークアップコンテンツ
+type MarkupContent struct {
+	Kind  string `json:"kind,omitempty"` // "plaintext" or "markdown"
+	Value string `json:"value,omitempty"`
+}
+
+// ─── DocumentSymbol ───
+
+// DocumentSymbolParams はドキュメントシンボルリクエストのパラメータ
+type DocumentSymbolParams struct {
+	TextDocument TextDocumentIdentifier `json:"textDocument"`
+}
+
+// DocumentSymbol はドキュメント内のシンボル
+type DocumentSymbol struct {
+	Name           string           `json:"name"`
+	Detail         string           `json:"detail,omitempty"`
+	Kind           SymbolKind       `json:"kind"`
+	Range          Range            `json:"range"`
+	SelectionRange Range            `json:"selectionRange"`
+	Children       []DocumentSymbol `json:"children,omitempty"`
+}
+
+// SymbolInformation はフラットなシンボル情報（旧形式）
+type SymbolInformation struct {
+	Name     string     `json:"name"`
+	Kind     SymbolKind `json:"kind"`
+	Location Location   `json:"location"`
+}
+
+// SymbolKind はシンボルの種類
+type SymbolKind int
+
+const (
+	SymbolKindFile          SymbolKind = 1
+	SymbolKindModule        SymbolKind = 2
+	SymbolKindNamespace     SymbolKind = 3
+	SymbolKindPackage       SymbolKind = 4
+	SymbolKindClass         SymbolKind = 5
+	SymbolKindMethod        SymbolKind = 6
+	SymbolKindProperty      SymbolKind = 7
+	SymbolKindField         SymbolKind = 8
+	SymbolKindConstructor   SymbolKind = 9
+	SymbolKindEnum          SymbolKind = 10
+	SymbolKindInterface     SymbolKind = 11
+	SymbolKindFunction      SymbolKind = 12
+	SymbolKindVariable      SymbolKind = 13
+	SymbolKindConstant      SymbolKind = 14
+	SymbolKindString        SymbolKind = 15
+	SymbolKindStruct        SymbolKind = 22
+	SymbolKindTypeParameter SymbolKind = 26
+)
+
+// SymbolKindName はシンボル種別の表示名を返す
+func SymbolKindName(kind SymbolKind) string {
+	switch kind {
+	case SymbolKindFile:
+		return "file"
+	case SymbolKindModule:
+		return "module"
+	case SymbolKindNamespace:
+		return "namespace"
+	case SymbolKindPackage:
+		return "package"
+	case SymbolKindClass:
+		return "class"
+	case SymbolKindMethod:
+		return "method"
+	case SymbolKindProperty:
+		return "property"
+	case SymbolKindField:
+		return "field"
+	case SymbolKindConstructor:
+		return "constructor"
+	case SymbolKindEnum:
+		return "enum"
+	case SymbolKindInterface:
+		return "interface"
+	case SymbolKindFunction:
+		return "function"
+	case SymbolKindVariable:
+		return "variable"
+	case SymbolKindConstant:
+		return "constant"
+	case SymbolKindStruct:
+		return "struct"
+	case SymbolKindTypeParameter:
+		return "type parameter"
+	default:
+		return "symbol"
+	}
+}
+
 // ─── ユーティリティ ───
 
 // FilePathToURI はファイルパスをfile://URIに変換する

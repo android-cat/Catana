@@ -1,12 +1,15 @@
 package editor
 
 import (
+	"catana/internal/ai"
+	"catana/internal/config"
 	"catana/internal/core"
 	"catana/internal/dap"
 	"catana/internal/git"
 	"catana/internal/lsp"
 	"catana/internal/syntax"
 	"catana/internal/terminal"
+	"context"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -23,6 +26,7 @@ const (
 	TabSearch
 	TabGit
 	TabExtensions
+	TabSettings
 )
 
 // OmniMode はオムニバーのモード
@@ -46,6 +50,14 @@ type Document struct {
 	IsDiff           bool            // Diff表示タブ
 	DiffData         []git.FileDiff  // Diffデータ
 	DiffStaged       bool            // ステージ済みdiff
+}
+
+// AIChatMessage はAIチャットの1メッセージ
+type AIChatMessage struct {
+	Role    ai.Role       // user / assistant
+	Content string        // メッセージ本文
+	Done    bool          // ストリーミング完了フラグ
+	Action  ai.ActionType // アクション種類
 }
 
 // TermHistoryEntry はTERMモードのコマンド履歴エントリ
@@ -85,6 +97,19 @@ type EditorState struct {
 	TermHistory          []*TermHistoryEntry // TERMモードコマンド履歴
 	TermShell            *TermShell          // TERMモードの永続シェル
 
+	// AI統合
+	AI             *ai.Manager        // AIプロバイダマネージャ
+	AIChatHistory  []*AIChatMessage   // AIチャット履歴
+	AIStreaming    bool               // AI応答ストリーミング中
+	AIStreamCancel context.CancelFunc // ストリーミングキャンセル
+	AIGhostText    string             // インライン補完のゴーストテキスト
+	AIGhostLine    int                // ゴーストテキストの表示行
+	AIGhostCol     int                // ゴーストテキストの表示列
+
+	// 設定
+	Config        *config.Config // 永続化設定
+	ConfigChanged bool           // 設定変更シグナル（AIプロバイダ再初期化等）
+
 	// Git統合
 	Git            *git.Repository            // Gitリポジトリ操作
 	GitBranch      string                     // 現在のブランチ名
@@ -102,6 +127,10 @@ type EditorState struct {
 // NewEditorState は初期状態のエディタステートを作成する
 func NewEditorState(workspace string) *EditorState {
 	repo := git.NewRepository(workspace)
+	aiMgr := ai.NewManager()
+	// デフォルトでOllamaプロバイダを登録
+	aiMgr.RegisterProvider(ai.ProviderOllama, ai.NewOllamaProvider("", ""))
+
 	s := &EditorState{
 		Workspace:     workspace,
 		Documents:     make([]*Document, 0),
@@ -116,6 +145,9 @@ func NewEditorState(workspace string) *EditorState {
 		DAP:           dap.NewClient(),
 		DebugOutput:   make([]string, 0),
 		Terminal:      terminal.NewManager(workspace),
+		AI:            aiMgr,
+		AIChatHistory: make([]*AIChatMessage, 0),
+		AIGhostLine:   -1,
 		Git:           repo,
 		GitDiffCache:  make(map[string][]git.FileDiff),
 		GitBlameCache: make(map[string][]git.BlameLine),
@@ -455,6 +487,428 @@ func (s *EditorState) Cleanup() {
 	if s.Terminal != nil {
 		s.Terminal.CloseAll()
 	}
+	// AIストリーミングをキャンセル
+	if s.AIStreamCancel != nil {
+		s.AIStreamCancel()
+	}
+}
+
+// --- AI操作メソッド ---
+
+// AISendMessage はAIにメッセージを送信しストリーミング応答を開始する
+func (s *EditorState) AISendMessage(text string, action ai.ActionType) {
+	if s.AI == nil || s.AIStreaming {
+		return
+	}
+
+	// ユーザーメッセージを追加
+	s.AIChatHistory = append(s.AIChatHistory, &AIChatMessage{
+		Role:    ai.RoleUser,
+		Content: text,
+		Done:    true,
+		Action:  action,
+	})
+
+	// AI応答プレースホルダーを追加
+	assistantMsg := &AIChatMessage{
+		Role:   ai.RoleAssistant,
+		Done:   false,
+		Action: action,
+	}
+	s.AIChatHistory = append(s.AIChatHistory, assistantMsg)
+	s.AIStreaming = true
+
+	// コンテキストを構築
+	aiCtx := s.buildAIContext()
+
+	// メッセージ履歴を構築
+	messages := []ai.Message{
+		{Role: ai.RoleSystem, Content: ai.BuildSystemPrompt(action)},
+	}
+
+	// コンテキスト情報を追加
+	contextPrompt := ai.BuildContextPrompt(aiCtx)
+	if contextPrompt != "" {
+		messages = append(messages, ai.Message{
+			Role:    ai.RoleUser,
+			Content: contextPrompt,
+		})
+		messages = append(messages, ai.Message{
+			Role:    ai.RoleAssistant,
+			Content: "コンテキストを確認しました。",
+		})
+	}
+
+	// 会話履歴を追加（最後のアシスタントプレースホルダーを除く）
+	for _, m := range s.AIChatHistory[:len(s.AIChatHistory)-1] {
+		messages = append(messages, ai.Message{
+			Role:    m.Role,
+			Content: m.Content,
+		})
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	s.AIStreamCancel = cancel
+
+	go func() {
+		defer func() {
+			assistantMsg.Done = true
+			s.AIStreaming = false
+		}()
+
+		ch, err := s.AI.ChatStream(ctx, &ai.ChatRequest{
+			Messages: messages,
+			Stream:   true,
+		})
+		if err != nil {
+			// ストリーミング失敗時はフォールバックで同期実行
+			resp, syncErr := s.AI.Chat(ctx, &ai.ChatRequest{
+				Messages: messages,
+			})
+			if syncErr != nil {
+				assistantMsg.Content = "エラー: " + syncErr.Error()
+				return
+			}
+			assistantMsg.Content = resp.Content
+			return
+		}
+
+		for delta := range ch {
+			if delta.Error != nil {
+				if ctx.Err() == nil { // キャンセル以外のエラー
+					assistantMsg.Content += "\n\n[エラー: " + delta.Error.Error() + "]"
+				}
+				return
+			}
+			assistantMsg.Content += delta.Content
+			if delta.Done {
+				return
+			}
+		}
+	}()
+}
+
+// AIApplyDiff はAI応答のdiffブロックをファイルに適用する
+func (s *EditorState) AIApplyDiff(diff *ai.DiffBlock) error {
+	if diff == nil || len(diff.Hunks) == 0 {
+		return fmt.Errorf("適用可能なdiffがありません")
+	}
+
+	// diffのファイルパスから対象ドキュメントを特定
+	targetDoc := s.findDocForDiff(diff)
+	if targetDoc == nil {
+		return fmt.Errorf("対象ファイルが開かれていません: %s", diff.FilePath)
+	}
+
+	// 現在のテキストにdiffを適用
+	original := targetDoc.Buffer.Text()
+	result, err := ai.ApplyDiffToText(original, diff)
+	if err != nil {
+		return fmt.Errorf("diff適用失敗: %w", err)
+	}
+
+	// バッファ全体を置換（Undo対応）
+	targetDoc.Buffer.SetSelection(0, targetDoc.Buffer.Length())
+	targetDoc.Buffer.DeleteSelection()
+	targetDoc.Buffer.InsertText(result)
+	targetDoc.Modified = true
+	targetDoc.UpdateHighlight(s.Highlighter)
+
+	return nil
+}
+
+// findDocForDiff はdiffの対象ドキュメントを検索する
+func (s *EditorState) findDocForDiff(diff *ai.DiffBlock) *Document {
+	if diff.FilePath == "" {
+		// ファイルパスが指定されていない場合はアクティブドキュメントを使用
+		return s.ActiveDocument()
+	}
+
+	// 相対パスでマッチ
+	for _, doc := range s.Documents {
+		if doc.IsDiff || doc.FilePath == "" {
+			continue
+		}
+		rel := s.RelativePath(doc.FilePath)
+		if rel == diff.FilePath || doc.FileName == diff.FilePath {
+			return doc
+		}
+		// パスの末尾でもマッチ（AIが省略パスを返す場合）
+		if strings.HasSuffix(doc.FilePath, "/"+diff.FilePath) {
+			return doc
+		}
+	}
+
+	return nil
+}
+
+// AIClearHistory はAIチャット履歴をクリアする
+func (s *EditorState) AIClearHistory() {
+	if s.AIStreamCancel != nil {
+		s.AIStreamCancel()
+	}
+	s.AIChatHistory = make([]*AIChatMessage, 0)
+	s.AIStreaming = false
+}
+
+// AIAcceptGhostText はゴーストテキストを受け入れてバッファに挿入する
+func (s *EditorState) AIAcceptGhostText() bool {
+	if s.AIGhostText == "" || s.AIGhostLine < 0 {
+		return false
+	}
+	doc := s.ActiveDocument()
+	if doc == nil {
+		return false
+	}
+	// カーソルがゴーストテキスト位置にあるか確認
+	if doc.Buffer.CursorLine() != s.AIGhostLine || doc.Buffer.CursorCol() != s.AIGhostCol {
+		s.AIDismissGhostText()
+		return false
+	}
+	doc.Buffer.InsertText(s.AIGhostText)
+	doc.Modified = true
+	doc.UpdateHighlight(s.Highlighter)
+	s.AIDismissGhostText()
+	return true
+}
+
+// AIDismissGhostText はゴーストテキストをクリアする
+func (s *EditorState) AIDismissGhostText() {
+	s.AIGhostText = ""
+	s.AIGhostLine = -1
+	s.AIGhostCol = 0
+}
+
+// AIRequestInlineCompletion はインライン補完をリクエストする
+func (s *EditorState) AIRequestInlineCompletion() {
+	doc := s.ActiveDocument()
+	if doc == nil || s.AI == nil {
+		return
+	}
+
+	curLine := doc.Buffer.CursorLine()
+	curCol := doc.Buffer.CursorCol()
+
+	// カーソル前のテキストを取得（最大50行）
+	var prefixLines []string
+	startLine := curLine - 50
+	if startLine < 0 {
+		startLine = 0
+	}
+	for i := startLine; i < curLine; i++ {
+		prefixLines = append(prefixLines, doc.Buffer.Line(i))
+	}
+	// カーソル行のカーソル位置まで
+	currentLine := doc.Buffer.Line(curLine)
+	runeCount := 0
+	prefixPart := ""
+	for i := range currentLine {
+		if runeCount >= curCol {
+			prefixPart = currentLine[:i]
+			break
+		}
+		runeCount++
+	}
+	if runeCount >= curCol && prefixPart == "" {
+		prefixPart = currentLine
+	}
+	prefixLines = append(prefixLines, prefixPart)
+	prefix := strings.Join(prefixLines, "\n")
+
+	// カーソル後のテキストを取得（最大20行）
+	var suffixLines []string
+	suffixPart := currentLine[len(prefixPart):]
+	if suffixPart != "" {
+		suffixLines = append(suffixLines, suffixPart)
+	}
+	endLine := curLine + 20
+	if endLine > doc.Buffer.LineCount() {
+		endLine = doc.Buffer.LineCount()
+	}
+	for i := curLine + 1; i < endLine; i++ {
+		suffixLines = append(suffixLines, doc.Buffer.Line(i))
+	}
+	suffix := strings.Join(suffixLines, "\n")
+
+	ghostLine := curLine
+	ghostCol := curCol
+
+	go func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+
+		resp, err := s.AI.Complete(ctx, &ai.CompletionRequest{
+			Prefix:   prefix,
+			Suffix:   suffix,
+			Language: doc.Language,
+			FilePath: doc.FilePath,
+		})
+		if err != nil {
+			return
+		}
+
+		text := strings.TrimRight(resp.Text, "\n")
+		if text == "" {
+			return
+		}
+
+		// 最初の行のみをゴーストテキストとして表示
+		firstLine := strings.SplitN(text, "\n", 2)[0]
+		if firstLine == "" {
+			return
+		}
+
+		s.AIGhostText = firstLine
+		s.AIGhostLine = ghostLine
+		s.AIGhostCol = ghostCol
+	}()
+}
+
+// buildAIContext はAI用のコンテキスト情報を構築する
+func (s *EditorState) buildAIContext() *ai.Context {
+	ctx := &ai.Context{}
+
+	// 開いているファイルの情報
+	for _, doc := range s.Documents {
+		if doc.IsDiff || doc.FilePath == "" {
+			continue
+		}
+		fc := ai.FileContext{
+			Path:     s.RelativePath(doc.FilePath),
+			Language: doc.Language,
+			Content:  doc.Buffer.Text(),
+			Active:   doc == s.ActiveDocument(),
+		}
+		ctx.OpenFiles = append(ctx.OpenFiles, fc)
+		if fc.Active {
+			ctx.ActiveFile = fc.Path
+		}
+	}
+
+	// 選択範囲
+	doc := s.ActiveDocument()
+	if doc != nil && doc.Buffer.HasSelection() {
+		sl, sc, el, ec := doc.Buffer.SelectionLineCol()
+		_ = sc
+		_ = ec
+		var lines []string
+		for i := sl; i <= el; i++ {
+			lines = append(lines, doc.Buffer.Line(i))
+		}
+		ctx.Selection = &ai.SelectionContext{
+			FilePath:  s.RelativePath(doc.FilePath),
+			Language:  doc.Language,
+			Text:      strings.Join(lines, "\n"),
+			StartLine: sl,
+			EndLine:   el,
+		}
+	}
+
+	// Git差分
+	if s.Git != nil && s.Git.IsGitRepo() {
+		diffs, err := s.Git.Diff("")
+		if err == nil && len(diffs) > 0 {
+			var diffText []string
+			for _, d := range diffs {
+				oldName := d.OldPath
+				if oldName == "" {
+					oldName = d.Path
+				}
+				diffText = append(diffText, fmt.Sprintf("--- %s\n+++ %s", oldName, d.Path))
+				for _, h := range d.Hunks {
+					diffText = append(diffText, fmt.Sprintf("@@ -%d,%d +%d,%d @@", h.OldStart, h.OldCount, h.NewStart, h.NewCount))
+					for _, l := range h.Lines {
+						diffText = append(diffText, l.Content)
+					}
+				}
+			}
+			ctx.GitDiff = strings.Join(diffText, "\n")
+		}
+	}
+
+	// LSPシンボル情報
+	if doc := s.ActiveDocument(); doc != nil && s.LSP != nil && doc.FilePath != "" {
+		symCtx := s.gatherSymbolContext(doc)
+		if symCtx != nil {
+			ctx.Symbols = symCtx
+		}
+	}
+
+	return ctx
+}
+
+// gatherSymbolContext はLSPからシンボル情報を収集する
+func (s *EditorState) gatherSymbolContext(doc *Document) *ai.SymbolContext {
+	client := s.LSP.ClientForLanguage(doc.Language)
+	if client == nil || !client.IsReady() {
+		return nil
+	}
+
+	uri := lsp.FilePathToURI(doc.FilePath)
+	curLine := doc.Buffer.CursorLine()
+	curCol := doc.Buffer.CursorCol()
+
+	symCtx := &ai.SymbolContext{
+		CursorLine: curLine,
+		CursorCol:  curCol,
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+
+	// ホバー情報（カーソル位置の型シグネチャ）
+	hover, err := client.Hover(ctx, uri, curLine, curCol)
+	if err == nil && hover != nil && hover.Contents.Value != "" {
+		symCtx.HoverInfo = hover.Contents.Value
+	}
+
+	// ドキュメントシンボル一覧
+	symbols, err := client.DocumentSymbol(ctx, uri)
+	if err == nil && len(symbols) > 0 {
+		symCtx.Symbols = flattenSymbols(symbols, 0)
+	}
+
+	// 診断情報
+	diags := s.LSP.GetDiagnostics(uri)
+	for _, d := range diags {
+		severity := "情報"
+		switch d.Severity {
+		case lsp.SeverityError:
+			severity = "エラー"
+		case lsp.SeverityWarning:
+			severity = "警告"
+		}
+		symCtx.Diagnostics = append(symCtx.Diagnostics,
+			fmt.Sprintf("[%s] 行%d: %s", severity, d.Range.Start.Line+1, d.Message))
+	}
+
+	// 内容がなければnil
+	if symCtx.HoverInfo == "" && len(symCtx.Symbols) == 0 && len(symCtx.Diagnostics) == 0 {
+		return nil
+	}
+	return symCtx
+}
+
+// flattenSymbols はDocumentSymbolツリーをフラットなリストに変換する
+func flattenSymbols(symbols []lsp.DocumentSymbol, maxDepth int) []ai.SymbolInfo {
+	var result []ai.SymbolInfo
+	var walk func(syms []lsp.DocumentSymbol, depth int)
+	walk = func(syms []lsp.DocumentSymbol, depth int) {
+		for _, sym := range syms {
+			result = append(result, ai.SymbolInfo{
+				Name:   sym.Name,
+				Kind:   lsp.SymbolKindName(sym.Kind),
+				Detail: sym.Detail,
+				Line:   sym.Range.Start.Line,
+			})
+			// 最大2階層まで展開（ネスト深すぎるとコンテキストが冗長になる）
+			if depth < 2 && len(sym.Children) > 0 {
+				walk(sym.Children, depth+1)
+			}
+		}
+	}
+	walk(symbols, 0)
+	return result
 }
 
 // RelativePath はワークスペースからの相対パスを返す

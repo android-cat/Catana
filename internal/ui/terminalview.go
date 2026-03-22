@@ -60,7 +60,7 @@ func (tv *TerminalView) Layout(gtx C, state *editor.EditorState, th *material.Th
 	}
 
 	size := gtx.Constraints.Max
-	fillBackground(gtx, nrgba(0x0F, 0x0F, 0x0F, 255), size)
+	fillBackground(gtx, tv.theme.TerminalBg, size)
 
 	return layout.Flex{Axis: layout.Vertical}.Layout(gtx,
 		// ターミナルタブバー
@@ -80,7 +80,7 @@ func (tv *TerminalView) layoutTabBar(gtx C, state *editor.EditorState, th *mater
 	gtx.Constraints.Min.Y = h
 	gtx.Constraints.Max.Y = h
 
-	fillBackground(gtx, nrgba(0x17, 0x17, 0x17, 255), image.Pt(gtx.Constraints.Max.X, h))
+	fillBackground(gtx, tv.theme.PanelBg, image.Pt(gtx.Constraints.Max.X, h))
 
 	return layout.Flex{Axis: layout.Horizontal, Alignment: layout.Middle}.Layout(gtx,
 		// タイトル
@@ -141,7 +141,7 @@ func (tv *TerminalView) layoutTab(gtx C, th *material.Theme, idx int, active boo
 	return layout.Inset{Left: unit.Dp(2), Right: unit.Dp(2)}.Layout(gtx, func(gtx C) D {
 		bgColor := color.NRGBA{A: 0}
 		if active {
-			bgColor = nrgba(0x34, 0xD3, 0x99, 30)
+			bgColor = tv.theme.AccentBg
 		}
 		label := fmt.Sprintf("zsh-%d", idx+1)
 		return withFlatBg(gtx, bgColor, func(gtx C) D {
@@ -230,7 +230,7 @@ func (tv *TerminalView) layoutTerminalBody(gtx C, state *editor.EditorState, th 
 			if cell.BG >= 0 {
 				bgStack := op.Offset(image.Pt(x, y)).Push(gtx.Ops)
 				bgClip := clip.Rect{Max: image.Pt(w, h)}.Push(gtx.Ops)
-				paint.ColorOp{Color: ansiColor(cell.BG)}.Add(gtx.Ops)
+				paint.ColorOp{Color: tv.ansiColor(cell.BG)}.Add(gtx.Ops)
 				paint.PaintOp{}.Add(gtx.Ops)
 				bgClip.Pop()
 				bgStack.Pop()
@@ -244,7 +244,7 @@ func (tv *TerminalView) layoutTerminalBody(gtx C, state *editor.EditorState, th 
 
 			fgColor := tv.theme.Text
 			if cell.FG >= 0 {
-				fgColor = ansiColor(cell.FG)
+				fgColor = tv.ansiColor(cell.FG)
 			}
 
 			cellStack := op.Offset(image.Pt(x, y)).Push(gtx.Ops)
@@ -270,7 +270,9 @@ func (tv *TerminalView) layoutTerminalBody(gtx C, state *editor.EditorState, th 
 		ch := int(tv.cellH)
 		curStack := op.Offset(image.Pt(cx, cy)).Push(gtx.Ops)
 		curClip := clip.Rect{Max: image.Pt(cw, ch)}.Push(gtx.Ops)
-		paint.ColorOp{Color: nrgba(0x34, 0xD3, 0x99, 100)}.Add(gtx.Ops)
+		cursorCol := tv.theme.Accent
+		cursorCol.A = 100
+		paint.ColorOp{Color: cursorCol}.Add(gtx.Ops)
 		paint.PaintOp{}.Add(gtx.Ops)
 		curClip.Pop()
 		curStack.Pop()
@@ -425,31 +427,13 @@ func (tv *TerminalView) handleTerminalPointer(gtx C, state *editor.EditorState) 
 }
 
 // ansiColor はANSI 256色パレットから色を返す
-func ansiColor(idx int) color.NRGBA {
+func (tv *TerminalView) ansiColor(idx int) color.NRGBA {
 	if idx < 0 || idx > 255 {
-		return nrgba(0xD1, 0xD5, 0xDB, 255)
+		return tv.theme.Text
 	}
 	// 標準16色
-	ansi16 := [16]color.NRGBA{
-		nrgba(0x00, 0x00, 0x00, 255), // 0: black
-		nrgba(0xCD, 0x3E, 0x45, 255), // 1: red
-		nrgba(0x34, 0xD3, 0x99, 255), // 2: green
-		nrgba(0xE5, 0xC0, 0x7B, 255), // 3: yellow
-		nrgba(0x61, 0xAF, 0xEF, 255), // 4: blue
-		nrgba(0xC6, 0x78, 0xDD, 255), // 5: magenta
-		nrgba(0x56, 0xB6, 0xC2, 255), // 6: cyan
-		nrgba(0xD1, 0xD5, 0xDB, 255), // 7: white
-		nrgba(0x5C, 0x63, 0x70, 255), // 8: bright black
-		nrgba(0xE0, 0x6C, 0x75, 255), // 9: bright red
-		nrgba(0x98, 0xC3, 0x79, 255), // 10: bright green
-		nrgba(0xE5, 0xC0, 0x7B, 255), // 11: bright yellow
-		nrgba(0x61, 0xAF, 0xEF, 255), // 12: bright blue
-		nrgba(0xC6, 0x78, 0xDD, 255), // 13: bright magenta
-		nrgba(0x56, 0xB6, 0xC2, 255), // 14: bright cyan
-		nrgba(0xFF, 0xFF, 0xFF, 255), // 15: bright white
-	}
 	if idx < 16 {
-		return ansi16[idx]
+		return tv.theme.TerminalANSI[idx]
 	}
 	// 216色キューブ (16-231)
 	if idx < 232 {

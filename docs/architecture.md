@@ -55,6 +55,13 @@ catana/
 │   │   └── editor.go     # エディタ状態管理・ドキュメント管理
 │   ├── git/              # Git CLIラッパー (Phase 4)
 │   │   └── git.go        # Repository構造体・Git操作・出力パーサー
+│   ├── ai/               # AI統合 (Phase 5)
+│   │   ├── provider.go   # Provider インターフェース・Manager・共通型
+│   │   ├── openai.go     # OpenAI GPT プロバイダ
+│   │   ├── anthropic.go  # Anthropic Claude プロバイダ
+│   │   ├── copilot.go    # GitHub Copilot SDK プロバイダ
+│   │   ├── ollama.go     # Ollama ローカルLLM プロバイダ
+│   │   └── context.go    # AIコンテキスト構築
 │   ├── lsp/              # LSPクライアント
 │   │   ├── protocol.go   # LSPプロトコル型定義
 │   │   ├── client.go     # LSPクライアント（JSON-RPC over stdio）
@@ -80,8 +87,9 @@ catana/
 │       ├── terminalview.go # ターミナルパネルUI
 │       ├── gitpanel.go   # Gitソースコントロールパネル (Phase 4)
 │       ├── diffview.go   # Diff表示ビュー (Phase 4)
+│       ├── settingspanel.go # 設定パネル（一般設定・AIプロバイダ認証）
 │       ├── statusbar.go  # ステータスバー
-│       └── omnibar.go    # オムニバー（AI/CMD/TERM）
+│       └── omnibar.go    # オムニバー（AI/CMD/TERM）+ モデル選択
 ├── .vscode/mcp.json      # MCPサーバー設定
 ├── docs/                 # 設計書
 ├── go.mod
@@ -124,7 +132,7 @@ catana/
 - **トランスポート:** JSON-RPC 2.0 over stdio（Content-Lengthヘッダー）
 - **同期モード:** textDocumentSync = 1（Full Sync）
 - **対応サーバー:** gopls (Go), rust-analyzer (Rust), pylsp (Python), tsserver (TypeScript)
-- **機能:** Completion, Definition, References, Rename, CodeAction, Format, Diagnostics
+- **機能:** Completion, Definition, References, Rename, CodeAction, Format, Diagnostics, Hover, DocumentSymbol
 - **UI統合:** CompletionPopup（補完候補表示）、診断アンダーライン（赤=Error, 黄=Warning, 青=Info）
 
 ### 8.2 DAPクライアント
@@ -158,7 +166,43 @@ catana/
 - Blame、Log（リポジトリ全体/ファイル単位）
 - Stash（push/pop/list/drop）
 
-## 10. 対応プラットフォーム
+## 10. AI統合設計 (Phase 5)
+
+### 10.1 プロバイダ抽象化レイヤー
+- **共通インターフェース:** `Provider` インターフェース（`Name`, `Chat`, `ChatStream`, `Complete`, `IsConfigured`）
+- **マネージャ:** `Manager` で複数プロバイダを登録・切替管理（RWMutex によるスレッドセーフ）
+- **設定管理:** `~/.catana/config.json` に永続化。環境変数フォールバック対応
+- **プロバイダ設定:** 設定ファイル優先、環境変数フォールバック（`OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `COPILOT_TOKEN`, `OLLAMA_MODEL`）
+
+### 10.2 対応プロバイダ
+| プロバイダ | ストリーミング | エンドポイント |
+|:---|:---|:---|
+| OpenAI (GPT-4o) | SSE (`data:` prefix) | `https://api.openai.com/v1` |
+| Anthropic (Claude) | SSE (`content_block_delta`) | `https://api.anthropic.com/v1` |
+| GitHub Copilot SDK | SSE (OpenAI互換) | `https://api.githubcopilot.com` |
+| Ollama (ローカル) | NDJSON (改行区切り) | `http://localhost:11434` |
+
+### 10.3 AI機能
+- **AIチャット:** OmniBar内チャットパネル（ストリーミング応答、履歴管理、クリア）
+- **インライン補完:** ゴーストテキスト表示（Tab で受入、Esc で破棄）
+- **コンテキスト構築:** 開いているファイル内容、選択範囲、Git差分、LSPシンボル情報を自動収集
+- **シンボル情報連携:** LSP Hover/DocumentSymbolをAIコンテキストに統合（カーソル位置のホバー情報、ドキュメントシンボル一覧、診断情報）
+- **Diff Preview & Apply:** AI応答内の ```diff ブロックを検出し、色分けプレビュー表示。Applyボタンでファジーハンクマッチングによるバッファ適用
+- **アクション種別:** Chat / Refactor / Explain / GenTest / GenDoc
+
+### 10.4 パッケージ構成
+```
+internal/ai/
+├── provider.go   # Provider インターフェース、Manager、共通型
+├── openai.go     # OpenAI GPT プロバイダ
+├── anthropic.go  # Anthropic Claude プロバイダ
+├── copilot.go    # GitHub Copilot SDK プロバイダ
+├── ollama.go     # Ollama ローカルLLM プロバイダ
+├── context.go    # AIコンテキスト構築（ファイル/選択/Git差分/シンボル）
+└── diff.go       # Diffブロックパーサー・ファジーハンクマッチング・Apply
+```
+
+## 11. 対応プラットフォーム
 
 | OS | GPUバックエンド |
 |:---|:---|

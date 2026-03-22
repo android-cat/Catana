@@ -241,7 +241,7 @@ func (cp *CompletionPopup) Layout(gtx C, th *material.Theme, cursorX, cursorY in
 			NE:   3, NW: 3, SE: 3, SW: 3,
 		}
 		innerStack := innerRect.Push(gtx.Ops)
-		paint.ColorOp{Color: nrgba(0x1A, 0x1A, 0x1A, 240)}.Add(gtx.Ops)
+		paint.ColorOp{Color: cp.theme.PopupBg}.Add(gtx.Ops)
 		paint.PaintOp{}.Add(gtx.Ops)
 		innerStack.Pop()
 	}, func(gtx C) D {
@@ -261,7 +261,7 @@ func (cp *CompletionPopup) layoutItem(gtx C, th *material.Theme, idx int) D {
 
 	bgColor := color.NRGBA{A: 0}
 	if isSelected {
-		bgColor = nrgba(0x34, 0xD3, 0x99, 40)
+		bgColor = cp.theme.AccentBg
 	}
 
 	return withFlatBg(gtx, bgColor, func(gtx C) D {
@@ -270,7 +270,7 @@ func (cp *CompletionPopup) layoutItem(gtx C, th *material.Theme, idx int) D {
 				// 種別アイコン
 				layout.Rigid(func(gtx C) D {
 					icon := completionKindIcon(item.Kind)
-					iconColor := completionKindColor(item.Kind)
+					iconColor := cp.completionKindColor(item.Kind)
 					lbl := material.Label(th, unit.Sp(10), icon)
 					lbl.Color = iconColor
 					return lbl.Layout(gtx)
@@ -337,23 +337,23 @@ func completionKindIcon(kind int) string {
 	}
 }
 
-func completionKindColor(kind int) color.NRGBA {
+func (cp *CompletionPopup) completionKindColor(kind int) color.NRGBA {
 	switch kind {
 	case lsp.CompletionKindMethod, lsp.CompletionKindFunction:
-		return nrgba(0x60, 0xA5, 0xFA, 255) // blue-400
+		return cp.theme.SynFunction
 	case lsp.CompletionKindField, lsp.CompletionKindProperty:
-		return nrgba(0x7D, 0xD3, 0xFC, 255) // sky-300
+		return cp.theme.SynFunction
 	case lsp.CompletionKindVariable:
-		return nrgba(0xD1, 0xD5, 0xDB, 255) // gray-300
+		return cp.theme.Text
 	case lsp.CompletionKindClass, lsp.CompletionKindStruct, lsp.CompletionKindInterface:
-		return nrgba(0xFD, 0xE6, 0x8A, 255) // yellow-200
+		return cp.theme.SynType
 	case lsp.CompletionKindKeyword:
-		return nrgba(0xEC, 0x48, 0x99, 255) // pink-500
+		return cp.theme.SynKeyword
 	case lsp.CompletionKindSnippet:
-		return nrgba(0xC0, 0x84, 0xFC, 255) // purple-400
+		return cp.theme.SynBuiltin
 	case lsp.CompletionKindConstant:
-		return nrgba(0xFD, 0xBA, 0x74, 255) // orange-300
+		return cp.theme.SynNumber
 	default:
-		return nrgba(0x9C, 0xA3, 0xAF, 255) // gray-400
+		return cp.theme.SynOperator
 	}
 }

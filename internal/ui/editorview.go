@@ -70,6 +70,9 @@ type EditorView struct {
 	diagVersion int
 	// Diff表示用
 	diffList widget.List
+	// AIインライン補完（ゴーストテキスト）
+	ghostText string
+	ghostLine int
 }
 
 // spanMetric はスパンの描画メトリクス
@@ -98,6 +101,7 @@ func NewEditorView(theme *Theme) *EditorView {
 		lastBlink:       time.Now(),
 		lastCursorLine:  -1,
 		completionPopup: NewCompletionPopup(theme),
+		ghostLine:       -1,
 	}
 	ev.list.Axis = layout.Vertical
 	ev.diffList.Axis = layout.Vertical
@@ -167,6 +171,10 @@ func (ev *EditorView) Layout(gtx C, state *editor.EditorState, th *material.Them
 	} else {
 		ev.searchMatches = nil
 	}
+
+	// AIゴーストテキストをstateから同期
+	ev.ghostText = state.AIGhostText
+	ev.ghostLine = state.AIGhostLine
 
 	viewportSize := gtx.Constraints.Max
 	dims := withBg(gtx, func(gtx C, _ image.Point) {
@@ -295,7 +303,7 @@ func (ev *EditorView) layoutLine(gtx C, th *material.Theme, state *editor.Editor
 		macro := op.Record(gtx.Ops)
 		innerDims := ev.layoutLineInner(gtx, th, doc, lineIdx, true, cursorCol)
 		call := macro.Stop()
-		fillBackground(gtx, nrgba(0xFF, 0xFF, 0xFF, 5), innerDims.Size)
+		fillBackground(gtx, ev.theme.CurrentLineBg, innerDims.Size)
 		call.Add(gtx.Ops)
 		dims = innerDims
 	} else {
@@ -358,7 +366,7 @@ func (ev *EditorView) layoutLineInner(gtx C, th *material.Theme, doc *editor.Doc
 		codEndX := numDims.Size.X + codeDims.Size.X + gtx.Dp(unit.Dp(4))
 		foldIndicOff := op.Offset(image.Pt(codEndX, 0)).Push(gtx.Ops)
 		fiBg := op.Offset(image.Pt(-2, 0)).Push(gtx.Ops)
-		fillBackground(gtx, nrgba(0xFF, 0xFF, 0xFF, 8), image.Pt(gtx.Dp(unit.Dp(24)), numDims.Size.Y))
+		fillBackground(gtx, ev.theme.SubtleBg, image.Pt(gtx.Dp(unit.Dp(24)), numDims.Size.Y))
 		fiBg.Pop()
 		fiLbl := material.Label(th, unit.Sp(10), "···")
 		fiLbl.Color = ev.theme.TextDark
@@ -533,11 +541,11 @@ func (ev *EditorView) layoutCodeSpans(gtx C, th *material.Theme, doc *editor.Doc
 		if diagX1 <= diagX0 {
 			diagX1 = diagX0 + int(ev.charWidthF*3) // 最小幅
 		}
-		diagColor := nrgba(0xE0, 0x6C, 0x75, 200) // 赤: エラー
+		diagColor := ev.theme.DiagError
 		if d.Severity == lsp.SeverityWarning {
-			diagColor = nrgba(0xE5, 0xC0, 0x7B, 200) // 黄: 警告
+			diagColor = ev.theme.DiagWarning
 		} else if d.Severity == lsp.SeverityInformation || d.Severity == lsp.SeverityHint {
-			diagColor = nrgba(0x61, 0xAF, 0xEF, 150) // 青: 情報
+			diagColor = ev.theme.DiagInfo
 		}
 		underlineH := gtx.Dp(unit.Dp(2))
 		underlineY := maxHeight - underlineH
@@ -555,6 +563,17 @@ func (ev *EditorView) layoutCodeSpans(gtx C, th *material.Theme, doc *editor.Doc
 			maxHeight = gtx.Dp(unit.Dp(18))
 		}
 		ev.drawCursor(gtx, cursorX, maxHeight)
+
+		// ゴーストテキスト描画（インラインAI補完）
+		if ev.ghostText != "" && ev.ghostLine == lineIdx {
+			ghostX := cursorX + gtx.Dp(unit.Dp(2)) // カーソルの右
+			gs := op.Offset(image.Pt(ghostX, 0)).Push(gtx.Ops)
+			ghostLbl := material.Label(th, unit.Sp(13), ev.ghostText)
+			ghostLbl.Color = ev.theme.GhostText
+			ghostLbl.Font = font.Font{Typeface: "Go Mono"}
+			ghostLbl.Layout(gtx)
+			gs.Pop()
+		}
 	}
 
 	return D{Size: image.Pt(xOffset, maxHeight)}
@@ -982,6 +1001,23 @@ func (ev *EditorView) handleKeyPress(e key.Event, state *editor.EditorState) {
 	ev.cursorVisible = true
 	ev.lastBlink = time.Now()
 
+	// ゴーストテキスト（AIインライン補完）の処理
+	if state.AIGhostText != "" {
+		if e.Name == key.NameTab && e.Modifiers == 0 {
+			// Tab: ゴーストテキストを受け入れ
+			if state.AIAcceptGhostText() {
+				return
+			}
+		}
+		if e.Name == key.NameEscape {
+			// Escape: ゴーストテキストを破棄
+			state.AIDismissGhostText()
+			return
+		}
+		// その他のキー入力でゴーストテキストを破棄
+		state.AIDismissGhostText()
+	}
+
 	// 補完ポップアップへのキーイベント転送
 	if ev.completionPopup.IsVisible() {
 		if e.Name == key.NameReturn || e.Name == key.NameTab {
@@ -1314,7 +1350,7 @@ func (ev *EditorView) layoutDiff(gtx C, th *material.Theme, doc *editor.Document
 			gtx.Constraints.Max.Y = lineH
 
 			if dl.isHunk {
-				return withFlatBg(gtx, nrgba(0x30, 0x30, 0x60, 40), func(gtx C) D {
+				return withFlatBg(gtx, ev.theme.DiffHunkBg, func(gtx C) D {
 					return layout.Inset{Left: unit.Dp(8)}.Layout(gtx, func(gtx C) D {
 						return layout.Center.Layout(gtx, func(gtx C) D {
 							lbl := material.Label(th, unit.Sp(11), dl.hunkText)
@@ -1331,11 +1367,11 @@ func (ev *EditorView) layoutDiff(gtx C, th *material.Theme, doc *editor.Document
 			prefix := " "
 			switch dl.diffLine.Type {
 			case git.DiffAdded:
-				bgCol = nrgba(0x22, 0xC5, 0x5E, 20)
+				bgCol = ev.theme.DiffAddedBg
 				prefixCol = ev.theme.GitAdded
 				prefix = "+"
 			case git.DiffDeleted:
-				bgCol = nrgba(0xEF, 0x44, 0x44, 20)
+				bgCol = ev.theme.DiffDeletedBg
 				prefixCol = ev.theme.GitDeleted
 				prefix = "-"
 			default:

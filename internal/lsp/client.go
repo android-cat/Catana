@@ -431,6 +431,86 @@ func (c *Client) CodeAction(ctx context.Context, uri string, r Range, diagnostic
 	return actions, nil
 }
 
+// ─── Hover ───
+
+// Hover はカーソル位置のホバー情報を取得する
+func (c *Client) Hover(ctx context.Context, uri string, line, character int) (*HoverResult, error) {
+	if !c.IsReady() {
+		return nil, fmt.Errorf("LSPサーバーが利用不可")
+	}
+
+	params := HoverParams{
+		TextDocument: TextDocumentIdentifier{URI: uri},
+		Position:     Position{Line: line, Character: character},
+	}
+
+	resp, err := c.sendRequestWait(ctx, "textDocument/hover", params)
+	if err != nil {
+		return nil, err
+	}
+
+	if resp.Result == nil || string(resp.Result) == "null" {
+		return nil, nil
+	}
+
+	// contents がstring / {kind,value} / MarkupContent のいずれか
+	var result HoverResult
+	if err := json.Unmarshal(resp.Result, &result); err != nil {
+		// content が文字列の場合
+		var simple struct {
+			Contents string `json:"contents"`
+			Range    *Range `json:"range,omitempty"`
+		}
+		if err2 := json.Unmarshal(resp.Result, &simple); err2 != nil {
+			return nil, fmt.Errorf("ホバーレスポンス解析失敗: %w", err)
+		}
+		result.Contents = MarkupContent{Kind: "plaintext", Value: simple.Contents}
+		result.Range = simple.Range
+	}
+	return &result, nil
+}
+
+// ─── DocumentSymbol ───
+
+// DocumentSymbol はドキュメント内のシンボル一覧を取得する
+func (c *Client) DocumentSymbol(ctx context.Context, uri string) ([]DocumentSymbol, error) {
+	if !c.IsReady() {
+		return nil, fmt.Errorf("LSPサーバーが利用不可")
+	}
+
+	params := DocumentSymbolParams{
+		TextDocument: TextDocumentIdentifier{URI: uri},
+	}
+
+	resp, err := c.sendRequestWait(ctx, "textDocument/documentSymbol", params)
+	if err != nil {
+		return nil, err
+	}
+
+	if resp.Result == nil || string(resp.Result) == "null" {
+		return nil, nil
+	}
+
+	// DocumentSymbol[] または SymbolInformation[] のどちらか
+	var symbols []DocumentSymbol
+	if err := json.Unmarshal(resp.Result, &symbols); err != nil {
+		// フラット形式（SymbolInformation）のフォールバック
+		var flat []SymbolInformation
+		if err2 := json.Unmarshal(resp.Result, &flat); err2 != nil {
+			return nil, fmt.Errorf("シンボルレスポンス解析失敗: %w", err)
+		}
+		for _, si := range flat {
+			symbols = append(symbols, DocumentSymbol{
+				Name:           si.Name,
+				Kind:           si.Kind,
+				Range:          si.Location.Range,
+				SelectionRange: si.Location.Range,
+			})
+		}
+	}
+	return symbols, nil
+}
+
 // ─── フォーマット ───
 
 // Format はドキュメントのフォーマットを実行する

@@ -267,6 +267,8 @@ classDiagram
         +References(uri string, line int, char int) ([]Location, error)
         +Rename(uri string, line int, char int, newName string) error
         +Format(uri string) ([]TextEdit, error)
+        +Hover(uri string, line int, char int) (*HoverResult, error)
+        +DocumentSymbol(uri string) ([]DocumentSymbol, error)
         +IsReady() bool
     }
 
@@ -429,4 +431,164 @@ classDiagram
     EditorState --> Repository : Git
     CatanaApp --> GitPanel : gitPanel (via Sidebar)
     CatanaApp --> DiffView : diffView
+```
+
+## Phase 5: AI統合
+
+```mermaid
+classDiagram
+    class Provider {
+        <<interface>>
+        +Name() string
+        +Chat(ctx, req) ChatResponse, error
+        +ChatStream(ctx, req) chan StreamDelta, error
+        +Complete(ctx, req) CompletionResponse, error
+        +IsConfigured() bool
+    }
+
+    class Manager {
+        -mu sync.RWMutex
+        -providers map~ProviderType~Provider
+        -active ProviderType
+        +NewManager() *Manager
+        +RegisterProvider(ptype, provider)
+        +SetActive(ptype) error
+        +Active() Provider
+        +ActiveType() ProviderType
+        +ConfiguredProviders() []ProviderType
+        +Chat(ctx, req) ChatResponse, error
+        +ChatStream(ctx, req) chan StreamDelta, error
+        +Complete(ctx, req) CompletionResponse, error
+    }
+
+    class OpenAIProvider {
+        -apiKey string
+        -model string
+        -endpoint string
+        -client *http.Client
+        +Name() string
+        +Chat(ctx, req) ChatResponse, error
+        +ChatStream(ctx, req) chan StreamDelta, error
+        +Complete(ctx, req) CompletionResponse, error
+        +IsConfigured() bool
+    }
+
+    class AnthropicProvider {
+        -apiKey string
+        -model string
+        -endpoint string
+        -client *http.Client
+        +Name() string
+        +Chat(ctx, req) ChatResponse, error
+        +ChatStream(ctx, req) chan StreamDelta, error
+        +Complete(ctx, req) CompletionResponse, error
+        +IsConfigured() bool
+    }
+
+    class CopilotProvider {
+        -token string
+        -endpoint string
+        -client *http.Client
+        +Name() string
+        +Chat(ctx, req) ChatResponse, error
+        +ChatStream(ctx, req) chan StreamDelta, error
+        +Complete(ctx, req) CompletionResponse, error
+        +IsConfigured() bool
+    }
+
+    class OllamaProvider {
+        -model string
+        -endpoint string
+        -client *http.Client
+        +Name() string
+        +Chat(ctx, req) ChatResponse, error
+        +ChatStream(ctx, req) chan StreamDelta, error
+        +Complete(ctx, req) CompletionResponse, error
+        +IsConfigured() bool
+    }
+
+    class ChatRequest {
+        +Messages []Message
+        +MaxTokens int
+        +Temperature float64
+        +Stream bool
+    }
+
+    class ChatResponse {
+        +Content string
+        +FinishReason string
+        +TokensUsed int
+    }
+
+    class StreamDelta {
+        +Content string
+        +Done bool
+        +Error error
+    }
+
+    class CompletionRequest {
+        +Prefix string
+        +Suffix string
+        +Language string
+        +MaxTokens int
+    }
+
+    class CompletionResponse {
+        +Text string
+    }
+
+    class Context {
+        +Files []FileContext
+        +Selection *SelectionContext
+        +GitDiff string
+        +Symbols *SymbolContext
+    }
+
+    class SymbolContext {
+        +HoverInfo string
+        +Symbols []SymbolInfo
+        +Diagnostics []string
+        +CursorLine int
+        +CursorCol int
+    }
+
+    class SymbolInfo {
+        +Name string
+        +Kind string
+        +Detail string
+        +Line int
+    }
+
+    class DiffBlock {
+        +FilePath string
+        +Hunks []DiffHunk
+        +RawText string
+    }
+
+    class DiffHunk {
+        +OldStart int
+        +OldCount int
+        +NewStart int
+        +NewCount int
+        +Lines []DiffLine
+    }
+
+    class AIChatMessage {
+        +Role ai.Role
+        +Content string
+        +Done bool
+        +Action ai.ActionType
+    }
+
+    Provider <|.. OpenAIProvider
+    Provider <|.. AnthropicProvider
+    Provider <|.. CopilotProvider
+    Provider <|.. OllamaProvider
+    Manager --> Provider : providers
+    Manager --> ChatRequest : Chat/ChatStream
+    Manager --> CompletionRequest : Complete
+    EditorState --> Manager : AI
+    EditorState --> AIChatMessage : AIChatHistory
+    OmniBar --> AIChatMessage : layoutChatArea
+    EditorView ..> EditorState : ghostText sync
 ```

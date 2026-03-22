@@ -337,11 +337,111 @@ UI再描画
 ```
 
 ### AI統合 (Phase 5)
+
+#### AIチャットフロー
 ```
-AI入力 → Provider Abstraction → HTTP API → ストリーミングレスポンス → UI更新
-                                    │
-                                    ├── OpenAI
-                                    ├── Anthropic
-                                    ├── Copilot SDK
-                                    └── Ollama (Local)
+ユーザー入力 (OmniBar AI mode)
+    │
+    ▼
+state.AISendMessage(text, ActionChat)
+    │
+    ├── buildAIContext() ──→ Context { Files, Selection, GitDiff, Symbols }
+    │       │
+    │       └── gatherSymbolContext() ──→ LSP Hover + DocumentSymbol + Diagnostics
+    │
+    ├── BuildSystemPrompt(action) ──→ system message
+    │
+    ├── BuildContextPrompt(ctx) ──→ context message
+    │
+    ▼
+ai.Manager.ChatStream()
+    │
+    ├── Active Provider (OpenAI / Anthropic / Copilot / Ollama)
+    │       │
+    │       ▼
+    │   HTTP POST (streaming)
+    │       │
+    │       ├── OpenAI/Copilot: SSE (data: prefix, [DONE] 終端)
+    │       ├── Anthropic: SSE (content_block_delta, message_stop)
+    │       └── Ollama: NDJSON (改行区切りJSON)
+    │
+    ▼
+StreamDelta channel
+    │
+    ▼
+goroutine: assistantMsg.Content に蓄積
+    │
+    ▼
+op.InvalidateCmd ──→ OmniBar 再描画 (ストリーミング表示)
+```
+
+#### Diff Preview & Apply フロー
+```
+AI応答テキスト
+    │
+    ▼
+ai.ExtractDiffBlocks(content) ──→ []DiffBlock 検出
+    │
+    ▼
+OmniBar.layoutAIMsg()
+    │
+    ├── removeDiffBlocks(text) ──→ テキスト部分のみ描画
+    │
+    └── layoutDiffPreview(block) ──→ Diff色分けプレビュー
+            │
+            ├── layoutDiffPreviewHeader ──→ ファイル名 + Apply/Dismiss ボタン
+            │
+            └── layoutDiffPreviewContent ──→ 赤(-)/緑(+)/灰(context) 行描画
+                    │
+                    ├── Apply ボタン ──→ state.AIApplyDiff(diff)
+                    │                        │
+                    │                        ├── findDocForDiff() ──→ 対象ドキュメント特定
+                    │                        ├── Buffer.Text() ──→ 元テキスト取得
+                    │                        ├── ai.ApplyDiffToText() ──→ ファジーハンクマッチング
+                    │                        └── SetSelection + Delete + InsertText ──→ バッファ置換
+                    │
+                    └── Dismiss ボタン ──→ diffHidden[idx] = true
+```
+
+#### インライン補完フロー
+```
+カーソル位置変更
+    │
+    ▼
+state.AIRequestInlineCompletion()
+    │
+    ├── カーソル前後のテキスト取得 (50行 prefix / 20行 suffix)
+    │
+    ├── ai.Manager.Complete()
+    │       │
+    │       ▼
+    │   Provider.Complete() ──→ HTTP POST ──→ 応答テキスト
+    │
+    ▼
+state.AIGhostText / AIGhostLine / AIGhostCol に設定
+    │
+    ▼
+EditorView.layoutCodeSpans()
+    │
+    ├── ゴーストテキスト描画 (theme.GhostText 半透明色)
+    │
+    ▼
+Tab キー ──→ state.AIAcceptGhostText() ──→ Buffer.InsertText()
+Esc キー ──→ state.AIDismissGhostText()
+```
+
+#### プロバイダ初期化フロー
+```
+NewCatanaApp()
+    │
+    ▼
+initAIProviders()
+    │
+    ├── os.Getenv("OPENAI_API_KEY") ──→ RegisterProvider(ProviderOpenAI, ...)
+    ├── os.Getenv("ANTHROPIC_API_KEY") ──→ RegisterProvider(ProviderAnthropic, ...)
+    ├── os.Getenv("COPILOT_TOKEN") ──→ RegisterProvider(ProviderCopilot, ...)
+    └── OLLAMA_MODEL / OLLAMA_ENDPOINT ──→ RegisterProvider(ProviderOllama, ...)
+    │
+    ▼
+SetActive() ──→ クラウドプロバイダ優先、なければOllama
 ```

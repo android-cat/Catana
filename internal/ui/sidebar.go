@@ -29,6 +29,7 @@ type Sidebar struct {
 	theme         *Theme
 	fileTree      *FileTree
 	gitPanel      *GitPanel
+	settingsPanel *SettingsPanel
 	btnNewFile    widget.Clickable
 	btnNewFolder  widget.Clickable
 	btnOpenFolder widget.Clickable
@@ -52,11 +53,12 @@ type Sidebar struct {
 // NewSidebar は新しいSidebarを作成する
 func NewSidebar(theme *Theme) *Sidebar {
 	sb := &Sidebar{
-		theme:        theme,
-		fileTree:     NewFileTree(theme),
-		gitPanel:     NewGitPanel(theme),
-		folderPickCh: make(chan string, 1),
-		widthPx:      -1,
+		theme:         theme,
+		fileTree:      NewFileTree(theme),
+		gitPanel:      NewGitPanel(theme),
+		settingsPanel: NewSettingsPanel(theme),
+		folderPickCh:  make(chan string, 1),
+		widthPx:       -1,
 	}
 	sb.searchEditor.SingleLine = true
 	sb.searchResultList.Axis = layout.Vertical
@@ -227,7 +229,7 @@ func (sb *Sidebar) addResizeHandle(gtx C, size image.Point) {
 	defer op.Offset(image.Pt(size.X-handleW, 0)).Push(gtx.Ops).Pop()
 	defer clip.Rect(image.Rect(0, 0, handleW, size.Y)).Push(gtx.Ops).Pop()
 	pointer.CursorColResize.Add(gtx.Ops)
-	fillBackground(gtx, nrgba(0xFF, 0xFF, 0xFF, 10), image.Pt(1, size.Y))
+	fillBackground(gtx, sb.theme.Separator, image.Pt(1, size.Y))
 }
 
 func (sb *Sidebar) layoutHeader(gtx C, state *editor.EditorState, th *material.Theme) D {
@@ -260,6 +262,8 @@ func (sb *Sidebar) layoutHeader(gtx C, state *editor.EditorState, th *material.T
 					title = "SOURCE CONTROL"
 				case editor.TabExtensions:
 					title = "EXTENSIONS"
+				case editor.TabSettings:
+					title = "SETTINGS"
 				}
 				// アイコンボタンの高さ(18dp icon + 4dp*2 padding = 26dp)に合わせる
 				btnH := gtx.Dp(unit.Dp(26))
@@ -321,6 +325,8 @@ func (sb *Sidebar) layoutPanel(gtx C, state *editor.EditorState, th *material.Th
 		return sb.layoutGitPanel(gtx, state, th)
 	case editor.TabExtensions:
 		return sb.layoutExtensionsPanel(gtx, state, th)
+	case editor.TabSettings:
+		return sb.settingsPanel.Layout(gtx, state, th)
 	default:
 		return D{}
 	}

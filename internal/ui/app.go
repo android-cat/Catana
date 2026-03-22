@@ -1,10 +1,13 @@
 package ui
 
 import (
+	"catana/internal/ai"
+	"catana/internal/config"
 	"catana/internal/debug"
 	"catana/internal/editor"
 	"image"
 	"log"
+	"os"
 	"runtime"
 	"time"
 
@@ -48,13 +51,23 @@ func NewCatanaApp(workspace string) *CatanaApp {
 	theme := DarkTheme()
 	state := editor.NewEditorState(workspace)
 
+	// 設定ファイル読込
+	cfg := config.Load()
+	state.Config = cfg
+
+	// テーマ設定の反映
+	isDark := cfg.General.DarkMode
+	if !isDark {
+		theme = LightTheme()
+	}
+
 	th := material.NewTheme()
 	th.Shaper = text.NewShaper(text.WithCollection(gofont.Collection()))
 
 	ca := &CatanaApp{
 		State:        state,
 		Theme:        theme,
-		isDarkMode:   true,
+		isDarkMode:   isDark,
 		matTheme:     th,
 		activityBar:  NewActivityBar(theme),
 		sidebar:      NewSidebar(theme),
@@ -77,6 +90,9 @@ func NewCatanaApp(workspace string) *CatanaApp {
 	if err := ca.debugServer.Start(); err != nil {
 		log.Printf("[警告] デバッグサーバー起動失敗: %v", err)
 	}
+
+	// AIプロバイダの設定（設定ファイル + 環境変数フォールバック）
+	ca.initAIProviders()
 
 	return ca
 }
@@ -116,6 +132,16 @@ func (a *CatanaApp) Run(w *app.Window) error {
 				}
 			}
 			a.lastFrame = now
+
+			// 設定変更の検出・適用
+			if a.State.ConfigChanged {
+				a.State.ConfigChanged = false
+				a.initAIProviders()
+				// テーマ切替
+				if a.State.Config != nil && a.State.Config.General.DarkMode != a.isDarkMode {
+					a.toggleTheme()
+				}
+			}
 
 			// メインレイアウト描画
 			a.layout(gtx)
@@ -249,6 +275,7 @@ func (a *CatanaApp) toggleTheme() {
 	a.sidebar.theme = t
 	a.sidebar.fileTree.theme = t
 	a.sidebar.gitPanel.theme = t
+	a.sidebar.settingsPanel.theme = t
 	a.tabBar.theme = t
 	a.editorView.theme = t
 	a.editorView.completionPopup.theme = t
@@ -260,6 +287,115 @@ func (a *CatanaApp) toggleTheme() {
 }
 
 // Stop はアプリケーションのクリーンアップを行う
+// initAIProviders は設定ファイルおよび環境変数からAIプロバイダを設定する
+func (a *CatanaApp) initAIProviders() {
+	if a.State == nil || a.State.AI == nil {
+		return
+	}
+	mgr := a.State.AI
+	cfg := a.State.Config
+
+	// ヘルパー: 設定ファイルと環境変数から値を取得（設定ファイル優先）
+	getVal := func(cfgVal, envKey string) string {
+		if cfgVal != "" {
+			return cfgVal
+		}
+		return os.Getenv(envKey)
+	}
+
+	// OpenAI
+	var openaiCfg config.AIProviderConfig
+	if cfg != nil {
+		openaiCfg = cfg.GetAIProvider("openai")
+	}
+	if key := getVal(openaiCfg.APIKey, "OPENAI_API_KEY"); key != "" {
+		model := getVal(openaiCfg.Model, "OPENAI_MODEL")
+		if model == "" {
+			model = "gpt-4.1"
+		}
+		mgr.RegisterProvider(ai.ProviderOpenAI, ai.NewOpenAIProvider(key, model))
+	}
+
+	// Anthropic
+	var anthropicCfg config.AIProviderConfig
+	if cfg != nil {
+		anthropicCfg = cfg.GetAIProvider("anthropic")
+	}
+	if key := getVal(anthropicCfg.APIKey, "ANTHROPIC_API_KEY"); key != "" {
+		model := getVal(anthropicCfg.Model, "ANTHROPIC_MODEL")
+		if model == "" {
+			model = "claude-sonnet-4-6"
+		}
+		mgr.RegisterProvider(ai.ProviderAnthropic, ai.NewAnthropicProvider(key, model))
+	}
+
+	// GitHub Copilot
+	var copilotCfg config.AIProviderConfig
+	if cfg != nil {
+		copilotCfg = cfg.GetAIProvider("copilot")
+	}
+	if token := getVal(copilotCfg.APIKey, "COPILOT_TOKEN"); token != "" {
+		endpoint := getVal(copilotCfg.Endpoint, "COPILOT_ENDPOINT")
+		if endpoint == "" {
+			endpoint = "https://api.githubcopilot.com"
+		}
+		mgr.RegisterProvider(ai.ProviderCopilot, ai.NewCopilotProvider(token, endpoint))
+	}
+
+	// Ollama（ローカル、常に利用可能）
+	var ollamaCfg config.AIProviderConfig
+	if cfg != nil {
+		ollamaCfg = cfg.GetAIProvider("ollama")
+	}
+	model := getVal(ollamaCfg.Model, "OLLAMA_MODEL")
+	if model == "" {
+		model = "codellama"
+	}
+	endpoint := getVal(ollamaCfg.Endpoint, "OLLAMA_ENDPOINT")
+	if endpoint == "" {
+		endpoint = "http://localhost:11434"
+	}
+	mgr.RegisterProvider(ai.ProviderOllama, ai.NewOllamaProvider(model, endpoint))
+
+	// Google Gemini
+	var geminiCfg config.AIProviderConfig
+	if cfg != nil {
+		geminiCfg = cfg.GetAIProvider("gemini")
+	}
+	if key := getVal(geminiCfg.APIKey, "GEMINI_API_KEY"); key != "" {
+		gemModel := getVal(geminiCfg.Model, "GEMINI_MODEL")
+		if gemModel == "" {
+			gemModel = "gemini-2.5-flash"
+		}
+		mgr.RegisterProvider(ai.ProviderGemini, ai.NewGeminiProvider(key, gemModel))
+	}
+
+	// 設定ファイルのアクティブプロバイダ・モデルを反映
+	if cfg != nil && cfg.AI.ActiveProvider != "" {
+		if err := mgr.SetActive(ai.ProviderType(cfg.AI.ActiveProvider)); err == nil {
+			if cfg.AI.ActiveModel != "" {
+				if p := mgr.Active(); p != nil {
+					p.SetModel(cfg.AI.ActiveModel)
+				}
+			}
+		}
+	} else {
+		// クラウドプロバイダ優先、なければOllama
+		configured := mgr.ConfiguredProviders()
+		activated := false
+		for _, pt := range configured {
+			if pt != ai.ProviderOllama {
+				mgr.SetActive(pt)
+				activated = true
+				break
+			}
+		}
+		if !activated {
+			mgr.SetActive(ai.ProviderOllama)
+		}
+	}
+}
+
 func (a *CatanaApp) Stop() {
 	if a.debugServer != nil {
 		a.debugServer.Stop()

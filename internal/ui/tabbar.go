@@ -46,7 +46,9 @@ func (tb *TabBar) layoutTabs(gtx C, state *editor.EditorState, th *material.Them
 			gtx.Constraints.Max.Y = height
 
 			return withBg(gtx, func(gtx C, sz image.Point) {
-				fillBackground(gtx, nrgba(0x0A, 0x0A, 0x0A, 128), sz)
+				surfAlpha := tb.theme.Surface
+				surfAlpha.A = 128
+				fillBackground(gtx, surfAlpha, sz)
 				defer op.Offset(image.Pt(0, sz.Y-1)).Push(gtx.Ops).Pop()
 				fillBackground(gtx, tb.theme.BorderSubtle, image.Pt(sz.X, 1))
 			}, func(gtx C) D {

@@ -53,6 +53,9 @@ func (ab *ActivityBar) Layout(gtx C, state *editor.EditorState, th *material.The
 	for ab.btnExt.Clicked(gtx) {
 		state.SetSidebarTab(editor.TabExtensions)
 	}
+	for ab.btnSettings.Clicked(gtx) {
+		state.SetSidebarTab(editor.TabSettings)
+	}
 	for ab.btnTheme.Clicked(gtx) {
 		if ab.onToggleTheme != nil {
 			ab.onToggleTheme()

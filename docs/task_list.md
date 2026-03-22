@@ -180,31 +180,37 @@
 ## Phase 5: AI 統合
 
 ### 5.1 Provider Abstraction Layer
-- [ ] 共通インターフェース定義
-- [ ] OpenAI プロバイダ
-- [ ] Anthropic プロバイダ
-- [ ] Copilot SDK プロバイダ
-- [ ] Ollama (ローカルLLM) プロバイダ
+- [x] 共通インターフェース定義
+- [x] OpenAI プロバイダ
+- [x] Anthropic プロバイダ
+- [x] Copilot SDK プロバイダ
+- [x] Ollama (ローカルLLM) プロバイダ
 
 ### 5.2 AI 機能
-- [ ] Inline Completion (ゴーストテキスト)
-- [ ] AI Chat パネル
-- [ ] コードリファクタリング提案
-- [ ] コード解説 (Explain)
-- [ ] テスト生成
-- [ ] ドキュメント生成
+- [x] Inline Completion (ゴーストテキスト)
+- [x] コードリファクタリング提案
+- [x] コード解説 (Explain)
+- [x] テスト生成
+- [x] ドキュメント生成
 
 ### 5.3 AI コンテキスト
-- [ ] 開いているファイルの自動連携
-- [ ] Git diff の連携
-- [ ] 選択範囲の連携
-- [ ] シンボル情報の連携
+- [x] 開いているファイルの自動連携
+- [x] Git diff の連携
+- [x] 選択範囲の連携
+- [x] シンボル情報の連携（LSP Hover/DocumentSymbol統合）
 
 ### 5.4 AI UI
-- [ ] Inline ghost text (予測補完表示)
-- [ ] Chat panel (対話UI)
-- [ ] Diff preview & Apply patch
+- [x] Inline ghost text (予測補完表示)
+- [x] Chat panel (対話UI)
+- [x] Diff preview & Apply patch
 - [ ] Command palette AI 呼び出し
+
+### 5.5 設定UI・永続化
+- [x] 設定パッケージ（`internal/config/config.go`）— `~/.catana/config.json` 永続化
+- [x] 設定パネル（`internal/ui/settingspanel.go`）— 一般設定 + AIプロバイダ認証
+- [x] アクティビティバー Settings ボタン → サイドバー設定タブ
+- [x] オムニバー AI モデル選択ドロップダウン
+- [x] 起動時設定読込 + ConfigChanged シグナルによる動的再適用
 
 ---
 

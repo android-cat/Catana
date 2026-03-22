@@ -86,7 +86,7 @@ func (mm *Minimap) Layout(gtx C, state *editor.EditorState, th *material.Theme, 
 	// ビューポート背景
 	vpOff := op.Offset(image.Pt(0, vpTop)).Push(gtx.Ops)
 	vpCl := clip.Rect{Max: image.Pt(width, vpHeight)}.Push(gtx.Ops)
-	paint.ColorOp{Color: nrgba(0xFF, 0xFF, 0xFF, 15)}.Add(gtx.Ops)
+	paint.ColorOp{Color: mm.theme.Separator}.Add(gtx.Ops)
 	paint.PaintOp{}.Add(gtx.Ops)
 	vpCl.Pop()
 	vpOff.Pop()
