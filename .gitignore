@@ -1,0 +1,25 @@
+# ビルド成果物
+/catana
+/catana-mcp
+
+# OS生成ファイル
+.DS_Store
+
+# エディタ・IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# デザイン参考ファイル
+/ui_design.jsx
+
+# テスト・プロファイル
+*.test
+*.out
+*.prof
+coverage.txt
+
+# デバッグ
+__debug_bin*
